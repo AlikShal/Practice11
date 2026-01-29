@@ -91,6 +91,14 @@ app.get("/api/products/:id", async (req, res) => {
   }
 });
 
+app.get("/version", (req, res) => {
+  res.json({
+    version: "1.1",
+    updatedAt: "2026-01-29"
+  });
+});
+
+
 app.post("/api/products", async (req, res) => {
   try {
     const result = await db
