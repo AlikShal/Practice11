@@ -1,20 +1,18 @@
-
 require("dotenv").config();
 
 const express = require("express");
-const { MongoClient } = require("mongodb");
-const { ObjectId } = require("mongodb");
+const { MongoClient, ObjectId } = require("mongodb");
 
 const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 const MONGO_URL = process.env.MONGO_URI;
-
 const DB_NAME = "shop";
 
 let db;
 
+/* ===== MongoDB Connection ===== */
 MongoClient.connect(MONGO_URL)
   .then((client) => {
     db = client.db(DB_NAME);
@@ -22,34 +20,42 @@ MongoClient.connect(MONGO_URL)
   })
   .catch((err) => console.error(err));
 
-// GET /api/products
+/* ===== ROOT ===== */
+app.get("/", (req, res) => {
+  res.send(`
+    <h1>Backend API</h1>
+    <p>API is running</p>
+    <ul>
+      <li>/api/products</li>
+      <li>/version</li>
+    </ul>
+  `);
+});
+
+/* ===== VERSION (Practice 12) ===== */
+app.get("/version", (req, res) => {
+  res.json({
+    version: "1.1",
+    updatedAt: "2026-01-29"
+  });
+});
+
+/* ===== GET ALL PRODUCTS ===== */
 app.get("/api/products", async (req, res) => {
   try {
     const { category, minPrice, sort, fields } = req.query;
 
     let filter = {};
-
-    if (category) {
-      filter.category = category;
-    }
-
-    if (minPrice) {
-      filter.price = { $gte: Number(minPrice) };
-    }
+    if (category) filter.category = category;
+    if (minPrice) filter.price = { $gte: Number(minPrice) };
 
     let projection = {};
-
     if (fields) {
-      fields.split(",").forEach((field) => {
-        projection[field] = 1;
-      });
+      fields.split(",").forEach((f) => (projection[f] = 1));
     }
 
     let sortOption = {};
-
-    if (sort === "price") {
-      sortOption.price = 1; // по возрастанию
-    }
+    if (sort === "price") sortOption.price = 1;
 
     const products = await db
       .collection("products")
@@ -58,23 +64,13 @@ app.get("/api/products", async (req, res) => {
       .sort(sortOption)
       .toArray();
 
-    res.json(products);
-  } catch (error) {
+    res.status(200).json(products);
+  } catch (err) {
     res.status(500).json({ error: "Server error" });
   }
 });
 
-app.get("/", (req, res) => {
-  res.send(`
-    <h1>Practice Task 10</h1>
-    <p>API is running</p>
-    <ul>
-      <li><a href="/api/products">/api/products</a></li>
-      <li><a href="/api/products?category=Electronics">Filter by category</a></li>
-      <li><a href="/api/products?minPrice=50">Min price</a></li>
-    </ul>
-  `);
-});
+/* ===== GET PRODUCT BY ID ===== */
 app.get("/api/products/:id", async (req, res) => {
   try {
     const product = await db
@@ -85,62 +81,97 @@ app.get("/api/products/:id", async (req, res) => {
       return res.status(404).json({ error: "Product not found" });
     }
 
-    res.json(product);
-  } catch (err) {
+    res.status(200).json(product);
+  } catch {
     res.status(400).json({ error: "Invalid ID" });
   }
 });
 
-app.get("/version", (req, res) => {
-  res.json({
-    version: "1.1",
-    updatedAt: "2026-01-29"
-  });
-});
-
-
+/* ===== CREATE PRODUCT ===== */
 app.post("/api/products", async (req, res) => {
   try {
-    const result = await db
-      .collection("products")
-      .insertOne(req.body);
+    const { title, price, category } = req.body;
+
+    if (!title || !price) {
+      return res.status(400).json({ error: "title and price are required" });
+    }
+
+    const result = await db.collection("products").insertOne({
+      title,
+      price,
+      category
+    });
 
     res.status(201).json(result);
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: "Cannot create product" });
   }
 });
 
+/* ===== FULL UPDATE (PUT) ===== */
 app.put("/api/products/:id", async (req, res) => {
   try {
-    const result = await db
-      .collection("products")
-      .updateOne(
-        { _id: new ObjectId(req.params.id) },
-        { $set: req.body }
-      );
+    const { title, price } = req.body;
 
-    res.json(result);
-  } catch (err) {
-    res.status(400).json({ error: "Update failed" });
+    if (!title || !price) {
+      return res.status(400).json({ error: "title and price are required" });
+    }
+
+    const result = await db.collection("products").updateOne(
+      { _id: new ObjectId(req.params.id) },
+      { $set: req.body }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: "Product not found" });
+    }
+
+    res.status(200).json({ message: "Product fully updated" });
+  } catch {
+    res.status(400).json({ error: "Invalid ID" });
   }
 });
 
+/* ===== PARTIAL UPDATE (PATCH) ===== */
+app.patch("/api/products/:id", async (req, res) => {
+  try {
+    if (!req.body || Object.keys(req.body).length === 0) {
+      return res.status(400).json({ error: "No fields to update" });
+    }
+
+    const result = await db.collection("products").updateOne(
+      { _id: new ObjectId(req.params.id) },
+      { $set: req.body }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: "Product not found" });
+    }
+
+    res.status(200).json({ message: "Product partially updated" });
+  } catch {
+    res.status(400).json({ error: "Invalid ID" });
+  }
+});
+
+/* ===== DELETE PRODUCT ===== */
 app.delete("/api/products/:id", async (req, res) => {
   try {
     const result = await db
       .collection("products")
       .deleteOne({ _id: new ObjectId(req.params.id) });
 
-    res.json(result);
-  } catch (err) {
-    res.status(400).json({ error: "Delete failed" });
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: "Product not found" });
+    }
+
+    res.status(204).send();
+  } catch {
+    res.status(400).json({ error: "Invalid ID" });
   }
 });
 
-
-
-// Запуск сервера
+/* ===== START SERVER ===== */
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
