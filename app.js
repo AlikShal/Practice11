@@ -6,6 +6,25 @@ const { MongoClient, ObjectId } = require("mongodb");
 const app = express();
 app.use(express.json());
 
+const AUTH_TOKEN = "Korazbay2006";
+function tokenAuth(req, res, next) {
+  const authHeader = req.headers["authorization"];
+
+  if (!authHeader) {
+    return res.status(401).json({ error: "Authorization token missing" });
+  }
+
+  const token = authHeader.split(" ")[1]; // Bearer TOKEN
+
+  if (token !== AUTH_TOKEN) {
+    return res.status(403).json({ error: "Invalid token" });
+  }
+
+  next();
+}
+
+
+
 const PORT = process.env.PORT || 3000;
 const MONGO_URL = process.env.MONGO_URI;
 const DB_NAME = "shop";
@@ -88,7 +107,7 @@ app.get("/api/products/:id", async (req, res) => {
 });
 
 /* ===== CREATE PRODUCT ===== */
-app.post("/api/products", async (req, res) => {
+app.post("/api/products", tokenAuth, async (req, res) => {
   try {
     const { title, price, category } = req.body;
 
@@ -109,7 +128,7 @@ app.post("/api/products", async (req, res) => {
 });
 
 /* ===== FULL UPDATE (PUT) ===== */
-app.put("/api/products/:id", async (req, res) => {
+app.put("/api/products/:id", tokenAuth, async (req, res) => {
   try {
     const { title, price } = req.body;
 
@@ -133,7 +152,7 @@ app.put("/api/products/:id", async (req, res) => {
 });
 
 /* ===== PARTIAL UPDATE (PATCH) ===== */
-app.patch("/api/products/:id", async (req, res) => {
+app.patch("/api/products/:id", tokenAuth, async (req, res) => {
   try {
     if (!req.body || Object.keys(req.body).length === 0) {
       return res.status(400).json({ error: "No fields to update" });
@@ -155,7 +174,7 @@ app.patch("/api/products/:id", async (req, res) => {
 });
 
 /* ===== DELETE PRODUCT ===== */
-app.delete("/api/products/:id", async (req, res) => {
+app.delete("/api/products/:id",tokenAuth, async (req, res) => {
   try {
     const result = await db
       .collection("products")
